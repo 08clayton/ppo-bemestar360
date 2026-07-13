@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BemEstar 360 - Triagem Domiciliar</title>
+    <link rel="stylesheet" href="./style.css">
+     <script type="module" src="./app.js"></script>
+</head>
+<body>
+    <header class="app-header">
+        <div class="header-container">
+            <h1>BemEstar 360</h1>
+            <div id="usuario-info" class="hidden">
+                <span id="usuario-logado"></span>
+                <button id="btn-logout" class="btn-secondary">Sair</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <section id="tela-autenticacao" class="card">
+            <div class="tabs">
+                <button id="tab-login" class="tab-btn active">Login</button>
+                <button id="tab-cadastro" class="tab-btn">Cadastro</button>
+            </div>
+
+            <div id="form-login-container">
+                <form id="form-login">
+                    <h2>Acessar o Sistema</h2>
+                    <div class="form-group">
+                        <label for="login-email">E-mail</label>
+                        <input type="email" id="login-email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="login-senha">Senha</label>
+                        <input type="password" id="login-senha" required>
+                    </div>
+                    <button type="submit" class="btn-primary">Entrar</button>
+                </form>
+            </div>
+
+            <div id="form-cadastro-container" class="hidden">
+                <form id="form-cadastro">
+                    <h2>Criar Conta</h2>
+                    <div class="form-group">
+                        <label for="cad-nome">Nome Completo</label>
+                        <input type="text" id="cad-nome" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="cad-email">E-mail</label>
+                        <input type="email" id="cad-email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="cad-senha">Senha</label>
+                        <input type="password" id="cad-senha" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="cad-tipo">Tipo de Perfil</label>
+                        <select id="cad-tipo" required>
+                            <option value="paciente">Paciente / Cidadão</option>
+                            <option value="profissional">Profissional de Saúde</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn-primary">Cadastrar</button>
+                </form>
+            </div>
+            <p id="auth-mensagem" class="mensagem error hidden"></p>
+        </section>
+
+        <section id="tela-principal" class="card hidden">
+            <h2>Painel de Controle</h2>
+            <p class="boas-vindas">Boas-vindas ao sistema de triagem domiciliar alinhado aos objetivos da ODS 3 da Organização das Nações Unidas.</p>
+            
+            <div id="acoes-paciente" class="hidden">
+                <div class="info-box">
+                    <h3>Sua Saude em Primeiro Lugar</h3>
+                    <p>Responda ao nosso questionario rapido para avaliarmos suas condicoes gerais de saude e determinarmos o nivel de risco e os cuidados necessarios.</p>
+                    <button id="btn-iniciar-questionario" class="btn-primary">Iniciar Questionario de Triagem</button>
+                </div>
+            </div>
+
+            <div id="acoes-profissional" class="hidden">
+                <div class="info-box">
+                    <h3>Alertas de Monitoramento</h3>
+                    <p>Monitore abaixo as triagens concluidas e a classificacao de risco epidemiologico e clinico dos pacientes cadastrados.</p>
+                    <button id="btn-atualizar-alertas" class="btn-secondary">Atualizar Painel</button>
+                    <div class="table-container">
+                        <table id="tabela-alertas">
+                            <thead>
+                                <tr>
+                                    <th>Paciente</th>
+                                    <th>Data</th>
+                                    <th>Classificacao de Risco</th>
+                                    <th>Sintomas Informados</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="tela-questionario" class="card hidden">
+            <div class="questionario-header">
+                <h2>Questionario de Triagem ODS 3</h2>
+                <div id="progresso-questionario">Pergunta 1 de 4</div>
+            </div>
+            <form id="form-pergunta">
+                <div id="bloco-pergunta"></div>
+                <div class="botoes-fluxo">
+                    <button type="button" id="btn-pergunta-anterior" class="btn-secondary hidden">Anterior</button>
+                    <button type="submit" id="btn-pergunta-proxima" class="btn-primary">Proxima</button>
+                </div>
+            </form>
+        </section>
+
+        <section id="tela-resultados" class="card hidden">
+            <h2>Resultado da Avaliacao</h2>
+            <div id="box-resultado" class="resultado-box">
+                <h3 id="resultado-risco">Risco</h3>
+                <p id="resultado-descricao"></p>
+            </div>
+            <button id="btn-voltar-painel" class="btn-primary">Voltar para o Painel</button>
+        </section>
+    </main>
+</body>
+</html>

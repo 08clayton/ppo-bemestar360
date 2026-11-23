@@ -63,12 +63,34 @@ const btnLogout = document.getElementById("btn-logout");
 const acoesPaciente = document.getElementById("acoes-paciente");
 const acoesProfissional = document.getElementById("acoes-profissional");
 
+function mostrarMensagem(mensagem, tipo = "error") {
+    authMensagem.className = tipo === "success" ? "mensagem" : "mensagem error";
+    authMensagem.innerText = mensagem;
+    authMensagem.classList.remove("hidden");
+}
+
 function navegarPara(tela) {
     tAutenticacao.classList.add("hidden");
     tPrincipal.classList.add("hidden");
     tQuestionario.classList.add("hidden");
     tResultados.classList.add("hidden");
     tela.classList.remove("hidden");
+}
+
+function normalizarTipo(tipo) {
+    return String(tipo ?? "").trim().toLowerCase();
+}
+
+function atualizarUsuarioNaTela() {
+    if (!usuarioLogado) {
+        headerUsuarioInfo.classList.add("hidden");
+        txtUsuarioLogado.innerText = "";
+        return;
+    }
+
+    const tipo = normalizarTipo(usuarioLogado.tipo_usuario ?? usuarioLogado.tipo);
+    txtUsuarioLogado.innerText = `${usuarioLogado.nome} (${tipo})`;
+    headerUsuarioInfo.classList.remove("hidden");
 }
 
 tabLogin.addEventListener("click", () => {
@@ -90,73 +112,88 @@ tabCadastro.addEventListener("click", () => {
 formCadastro.addEventListener("submit", async (e) => {
     e.preventDefault();
     authMensagem.classList.add("hidden");
-    const nome = document.getElementById("cad-nome").value;
-    const email = document.getElementById("cad-email").value;
+
+    const nome = document.getElementById("cad-nome").value.trim();
+    const endereco = document.getElementById("cad-endereco").value.trim();
+    const email = document.getElementById("cad-email").value.trim();
     const senha = document.getElementById("cad-senha").value;
     const tipo = document.getElementById("cad-tipo").value;
 
     const res = await fetch("/api/cadastro", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nome, email, senha, tipo })
+        body: JSON.stringify({ nome, endereco, email, senha, tipo_usuario: tipo })
     });
+
     const dados = await res.json();
     if (res.ok && dados.sucesso) {
         formCadastro.reset();
         tabLogin.click();
-        authMensagem.className = "mensagem";
-        authMensagem.style.backgroundColor = "#c6f6d5";
-        authMensagem.style.color = "#22543d";
-        authMensagem.innerText = "Conta criada com sucesso! Faça o login.";
-        authMensagem.classList.remove("hidden");
-    } else {
-        authMensagem.className = "mensagem error";
-        authMensagem.innerText = dados.erro || "Erro ao realizar cadastro.";
-        authMensagem.classList.remove("hidden");
+        mostrarMensagem("Conta criada com sucesso! Faça o login.", "success");
+        return;
     }
+
+    mostrarMensagem(dados.erro || "Erro ao realizar cadastro.", "error");
 });
 
 formLogin.addEventListener("submit", async (e) => {
     e.preventDefault();
     authMensagem.classList.add("hidden");
-    const email = document.getElementById("login-email").value;
+
+    const email = document.getElementById("login-email").value.trim();
     const senha = document.getElementById("login-senha").value;
 
     const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, residential: undefined, senha })
+        body: JSON.stringify({ email, senha })
     });
+
     const dados = await res.json();
     if (res.ok && dados.sucesso) {
-        usuarioLogado = dados.usuario;
+        const usuario = dados.usuario;
+        usuarioLogado = {
+            ...usuario,
+            id: usuario.id_usuario ?? usuario.id,
+            id_usuario: usuario.id_usuario ?? usuario.id,
+            tipo: normalizarTipo(usuario.tipo_usuario ?? usuario.tipo),
+            tipo_usuario: normalizarTipo(usuario.tipo_usuario ?? usuario.tipo)
+        };
+
         formLogin.reset();
-        txtUsuarioLogado.innerText = `${usuarioLogado.nome} (${usuarioLogado.tipo})`;
-        headerUsuarioInfo.classList.remove("hidden");
+        atualizarUsuarioNaTela();
         carregarPainel();
-    } else {
-        authMensagem.className = "mensagem error";
-        authMensagem.innerText = dados.erro || "Falha na autenticação.";
-        authMensagem.classList.remove("hidden");
+        return;
     }
+
+    mostrarMensagem(dados.erro || "Falha na autenticação.", "error");
 });
 
 btnLogout.addEventListener("click", () => {
     usuarioLogado = null;
-    headerUsuarioInfo.classList.add("hidden");
+    atualizarUsuarioNaTela();
     navegarPara(tAutenticacao);
 });
 
 function carregarPainel() {
     navegarPara(tPrincipal);
-    if (usuarioLogado.tipo === "paciente") {
+    const tipo = normalizarTipo(usuarioLogado?.tipo_usuario ?? usuarioLogado?.tipo);
+
+    if (tipo === "paciente") {
         acoesPaciente.classList.remove("hidden");
         acoesProfissional.classList.add("hidden");
-    } else if (usuarioLogado.tipo === "profissional") {
+        return;
+    }
+
+    if (tipo === "profissional") {
         acoesPaciente.classList.add("hidden");
         acoesProfissional.classList.remove("hidden");
         carregarAlertas();
+        return;
     }
+
+    acoesPaciente.classList.add("hidden");
+    acoesProfissional.classList.add("hidden");
 }
 
 document.getElementById("btn-iniciar-questionario").addEventListener("click", () => {
@@ -168,8 +205,10 @@ document.getElementById("btn-iniciar-questionario").addEventListener("click", ()
 
 function renderizarPergunta() {
     const pergunta = perguntas[indicePerguntaAtual];
+    if (!pergunta) return;
+
     document.getElementById("progresso-questionario").innerText = `Pergunta ${indicePerguntaAtual + 1} de ${perguntas.length}`;
-    
+
     let html = `<p class="form-group" style="font-size: 1.15rem; font-weight: 600; margin-bottom: 1.5rem;">${pergunta.texto}</p>`;
     pergunta.opcoes.forEach((opcao, idx) => {
         html += `
@@ -181,10 +220,11 @@ function renderizarPergunta() {
     });
     document.getElementById("bloco-pergunta").innerHTML = html;
 
+    const btnAnterior = document.getElementById("btn-pergunta-anterior");
     if (indicePerguntaAtual > 0) {
-        document.getElementById("btn-pergunta-anterior").classList.remove("hidden");
+        btnAnterior.classList.remove("hidden");
     } else {
-        document.getElementById("btn-pergunta-anterior").classList.add("hidden");
+        btnAnterior.classList.add("hidden");
     }
 }
 
@@ -199,44 +239,56 @@ document.getElementById("btn-pergunta-anterior").addEventListener("click", () =>
 formPergunta.addEventListener("submit", async (e) => {
     e.preventDefault();
     const selecionado = document.querySelector('input[name="opcao"]:checked');
-    respostasFormulario.push(parseInt(selecionado.value));
+    if (!selecionado) {
+        mostrarMensagem("Selecione uma opção antes de continuar.", "error");
+        return;
+    }
+
+    respostasFormulario.push(Number.parseInt(selecionado.value, 10));
 
     if (indicePerguntaAtual < perguntas.length - 1) {
         indicePerguntaAtual++;
         renderizarPergunta();
-    } else {
-        await finalizarQuestionario();
+        return;
     }
+
+    await finalizarQuestionario();
 });
 
 async function finalizarQuestionario() {
-    const pontuacaoTotal = respostasFormulario.reduce((a, b) => a + b, 0);
-    let risco = "Baixo";
+    const pontuacaoTotal = respostasFormulario.reduce((acumulador, valor) => acumulador + valor, 0);
+    let risco = "baixo";
     let descricao = "Sua condicao de saude aparente e estavel. Continue mantendo habitos saudaveis e preventivos alinhados com a ODS 3.";
 
     if (pontuacaoTotal >= 4 && pontuacaoTotal <= 7) {
-        risco = "Medio";
+        risco = "medio";
         descricao = "Atencao observada. Identificamos fatores de vulnerabilidade social ou clinica moderada. Recomendamos buscar orientacao na Unidade de Saude mais proxima.";
     } else if (pontuacaoTotal > 7) {
-        risco = "Alto";
+        risco = "alto";
         descricao = "Alerta critico! Seus sintomas ou condicoes estruturais indicam necessidade imediata de suporte ou intervencao medica emergencial.";
     }
 
     const payload = {
-        usuario_id: usuarioLogado.id,
-        respostas: respostasFormulario,
-        risco: risco
+        id_usuario: usuarioLogado?.id_usuario ?? usuarioLogado?.id,
+        respostas_sintomas: respostasFormulario,
+        nivel_risco: risco
     };
 
-    await fetch("/api/triagem", {
+    const res = await fetch("/api/triagem", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
     });
 
+    const dados = await res.json();
+    if (!res.ok) {
+        mostrarMensagem(dados.erro || "Não foi possível salvar a triagem.", "error");
+        return;
+    }
+
     const boxResultado = document.getElementById("box-resultado");
-    boxResultado.className = `resultado-box ${risco.toLowerCase()}`;
-    document.getElementById("resultado-risco").innerText = `Risco: ${risco}`;
+    boxResultado.className = `resultado-box ${risco}`;
+    document.getElementById("resultado-risco").innerText = `Risco: ${risco.charAt(0).toUpperCase()}${risco.slice(1)}`;
     document.getElementById("resultado-descricao").innerText = descricao;
 
     navegarPara(tResultados);
@@ -248,24 +300,37 @@ document.getElementById("btn-voltar-painel").addEventListener("click", () => {
 
 document.getElementById("btn-atualizar-alertas").addEventListener("click", carregarAlertas);
 
+function normalizarClassRisco(risco) {
+    return String(risco ?? "baixo").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 async function carregarAlertas() {
     const res = await fetch("/api/alertas");
-    if (res.ok) {
-        const dados = await res.json();
-        const tbody = document.querySelector("#tabela-alertas tbody");
-        tbody.innerHTML = "";
-        
-        dados.forEach(item => {
-            const tr = document.createElement("tr");
-            const dataFormatada = new Date(item.data).toLocaleString("pt-BR");
-            
-            tr.innerHTML = `
-                <td><strong>${item.nome}</strong></td>
-                <td>${dataFormatada}</td>
-                <td><span class="badge ${item.risco.toLowerCase()}">${item.risco}</span></td>
-                <td>Valores de Resposta: [ ${item.respostas.join(", ")} ]</td>
-            `;
-            tbody.appendChild(tr);
-        });
+    if (!res.ok) {
+        return;
     }
+
+    const dados = await res.json();
+    const tbody = document.querySelector("#tabela-alertas tbody");
+    if (!tbody) {
+        return;
+    }
+
+    tbody.innerHTML = "";
+    const lista = Array.isArray(dados) ? dados : [];
+
+    lista.forEach((item) => {
+        const tr = document.createElement("tr");
+        const dataFormatada = new Date(item.data).toLocaleString("pt-BR");
+        const respostas = Array.isArray(item.respostas) ? item.respostas : [];
+        const risco = normalizarClassRisco(item.risco);
+
+        tr.innerHTML = `
+            <td><strong>${item.nome}</strong></td>
+            <td>${dataFormatada}</td>
+            <td><span class="badge ${risco}">${item.risco}</span></td>
+            <td>Valores de Resposta: [ ${respostas.join(", ")} ]</td>
+        `;
+        tbody.appendChild(tr);
+    });
 }

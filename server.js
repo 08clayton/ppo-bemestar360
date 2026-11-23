@@ -1,10 +1,12 @@
-import { Database } from "bun:sqlite";
+const http = require("node:http");
+const fs = require("node:fs/promises");
+const path = require("node:path");
+const { DatabaseSync } = require("node:sqlite");
 
-const db = new Database("bemestar360.db", { create: true });
+const db = new DatabaseSync(path.join(__dirname, "bemestar360.db"));
+db.exec("PRAGMA foreign_keys = ON;");
 
-db.run("PRAGMA foreign_keys = ON;");
-
-db.run(`
+db.exec(`
   CREATE TABLE IF NOT EXISTS usuarios (
     id_usuario INTEGER PRIMARY KEY AUTOINCREMENT,
     nome TEXT NOT NULL,
@@ -15,18 +17,18 @@ db.run(`
   )
 `);
 
-db.run(`
+db.exec(`
   CREATE TABLE IF NOT EXISTS triagens (
     id_triagem INTEGER PRIMARY KEY AUTOINCREMENT,
     id_usuario INTEGER NOT NULL,
     respostas_sintomas TEXT NOT NULL,
-    nivel_risco TEXT CHECK(nivel_risco IN ('baixo', 'médio', 'alto')) NOT NULL,
+    nivel_risco TEXT CHECK(nivel_risco IN ('baixo', 'medio', 'médio', 'alto')) NOT NULL,
     data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(id_usuario) REFERENCES usuarios(id_usuario) ON DELETE CASCADE
   )
 `);
 
-db.run(`
+db.exec(`
   CREATE TABLE IF NOT EXISTS alertas (
     id_alerta INTEGER PRIMARY KEY AUTOINCREMENT,
     id_triagem INTEGER NOT NULL,
@@ -34,7 +36,7 @@ db.run(`
   )
 `);
 
-db.run(`
+db.exec(`
   CREATE TABLE IF NOT EXISTS comorbidades (
     id_comorbidade INTEGER PRIMARY KEY AUTOINCREMENT,
     id_paciente INTEGER NOT NULL,
@@ -45,141 +47,260 @@ db.run(`
   )
 `);
 
-async function servirArquivo(caminho, contentType) {
-  const arquivo = Bun.file(caminho);
-  if (await arquivo.exists()) {
-    return new Response(arquivo, {
-      headers: { "Content-Type": contentType }
-    });
-  }
-  return new Response("Arquivo nao encontrado", { status: 404 });
+const mimeTypes = {
+  ".html": "text/html; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".svg": "image/svg+xml",
+  ".ico": "image/x-icon"
+};
+
+function sendJson(res, statusCode, payload) {
+  const body = JSON.stringify(payload);
+  res.writeHead(statusCode, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Length": Buffer.byteLength(body)
+  });
+  res.end(body);
 }
 
-const server = Bun.serve({
-  port: 3000,
-  async fetch(req) {
-    const url = new URL(req.url);
-    const m = req.method;
+async function lerCorpo(req) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.on("data", (chunk) => {
+      body += chunk;
+    });
+    req.on("end", () => {
+      if (!body) {
+        resolve({});
+        return;
+      }
 
-    if (m === "GET" && url.pathname === "/") return servirArquivo("./index.html", "text/html");
-    if (m === "GET" && url.pathname === "/index.html") return servirArquivo("./index.html", "text/html");
-    if (m === "GET" && url.pathname === "/style.css") return servirArquivo("./style.css", "text/css");
-    if (m === "GET" && url.pathname === "/app.js") return servirArquivo("./app.js", "application/javascript");
-
-    if (m === "POST" && url.pathname === "/api/cadastro") {
       try {
-        const dados = await req.json();
-        const { nome, endereco, email, senha, tipo_usuario } = dados;
-        if (!nome || !endereco || !email || !senha || !tipo_usuario) {
-          return new Response(JSON.stringify({ erro: "Dados incompletos" }), { status: 400, headers: { "Content-Type": "application/json" } });
-        }
+        resolve(JSON.parse(body));
+      } catch (error) {
+        reject(new Error("JSON inválido"));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+async function servirArquivo(res, caminhoRelativo) {
+  const caminhoCompleto = path.join(__dirname, caminhoRelativo);
+
+  try {
+    const conteudo = await fs.readFile(caminhoCompleto);
+    const tipo = mimeTypes[path.extname(caminhoCompleto).toLowerCase()] || "application/octet-stream";
+    res.writeHead(200, { "Content-Type": tipo });
+    res.end(conteudo);
+  } catch (error) {
+    res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("Arquivo nao encontrado");
+  }
+}
+
+const server = http.createServer(async (req, res) => {
+  try {
+    const url = new URL(req.url, "http://localhost");
+    const method = req.method || "GET";
+
+    if (method === "GET" && url.pathname === "/") {
+      await servirArquivo(res, "index.html");
+      return;
+    }
+
+    if (method === "GET" && url.pathname === "/index.html") {
+      await servirArquivo(res, "index.html");
+      return;
+    }
+
+    if (method === "GET" && url.pathname === "/style.css") {
+      await servirArquivo(res, "style.css");
+      return;
+    }
+
+    if (method === "GET" && url.pathname === "/app.js") {
+      await servirArquivo(res, "app.js");
+      return;
+    }
+
+    if (method === "POST" && url.pathname === "/api/cadastro") {
+      const dados = await lerCorpo(req);
+      const { nome, endereco, email, senha, tipo_usuario } = dados;
+
+      if (!nome || !endereco || !email || !senha || !tipo_usuario) {
+        sendJson(res, 400, { erro: "Dados incompletos" });
+        return;
+      }
+
+      try {
         const stmt = db.prepare("INSERT INTO usuarios (nome, endereco, email, senha, tipo_usuario) VALUES (?, ?, ?, ?, ?)");
-        stmt.run(nome, endereco, email, senha, tipo_usuario);
-        return new Response(JSON.stringify({ sucesso: true }), { status: 201, headers: { "Content-Type": "application/json" } });
-      } catch (e) {
-        return new Response(JSON.stringify({ erro: "Email ja cadastrado ou erro de validacao" }), { status: 400, headers: { "Content-Type": "application/json" } });
+        stmt.run(String(nome).trim(), String(endereco).trim(), String(email).trim(), String(senha), String(tipo_usuario).trim().toLowerCase());
+        sendJson(res, 201, { sucesso: true });
+        return;
+      } catch (error) {
+        const mensagemErro = String(error?.message || "");
+        if (mensagemErro.includes("UNIQUE") || mensagemErro.includes("unique")) {
+          sendJson(res, 409, { erro: "E-mail já cadastrado." });
+          return;
+        }
+
+        console.error("Erro em /api/cadastro:", error);
+        sendJson(res, 400, { erro: "Email já cadastrado ou erro de validação" });
+        return;
       }
     }
 
-    if (m === "POST" && url.pathname === "/api/login") {
+    if (method === "POST" && url.pathname === "/api/login") {
+      const dados = await lerCorpo(req);
+      const { email, senha } = dados;
+
+      if (!email || !senha) {
+        sendJson(res, 400, { erro: "Email e senha são obrigatórios." });
+        return;
+      }
+
       try {
-        const dados = await req.json();
-        const { email, senha } = dados;
         const stmt = db.prepare("SELECT id_usuario, nome, endereco, email, tipo_usuario FROM usuarios WHERE email = ? AND senha = ?");
-        const usuario = stmt.get(email, senha);
-        if (usuario) {
-          return new Response(JSON.stringify({ sucesso: true, usuario }), { status: 200, headers: { "Content-Type": "application/json" } });
-        } else {
-          return new Response(JSON.stringify({ erro: "Credenciais invalidas" }), { status: 401, headers: { "Content-Type": "application/json" } });
-        }
-      } catch (e) {
-        return new Response(JSON.stringify({ erro: "Erro no servidor" }), { status: 500, headers: { "Content-Type": "application/json" } });
-      }
-    }
+        const usuario = stmt.get(String(email).trim(), String(senha));
 
-    if (m === "POST" && url.pathname === "/api/triagem") {
-      try {
-        const dados = await req.json();
-        const { id_usuario, respostas_sintomas, nivel_risco } = dados;
-        if (!id_usuario || !respostas_sintomas || !nivel_risco) {
-          return new Response(JSON.stringify({ erro: "Dados incompletos" }), { status: 400, headers: { "Content-Type": "application/json" } });
+        if (!usuario) {
+          sendJson(res, 401, { erro: "Credenciais invalidas" });
+          return;
         }
 
-        const transacao = db.transaction(() => {
-          const stmtTriagem = db.prepare("INSERT INTO triagens (id_usuario, respostas_sintomas, nivel_risco) VALUES (?, ?, ?)");
-          const resultado = stmtTriagem.run(id_usuario, JSON.stringify(respostas_sintomas), nivel_risco.toLowerCase());
-          const idTriagemInserida = resultado.lastInsertRowId;
+        const usuarioNormalizado = {
+          id_usuario: usuario.id_usuario,
+          id: usuario.id_usuario,
+          nome: usuario.nome,
+          endereco: usuario.endereco,
+          email: usuario.email,
+          tipo_usuario: usuario.tipo_usuario,
+          tipo: usuario.tipo_usuario
+        };
 
-          if (nivel_risco.toLowerCase() === "médio" || nivel_risco.toLowerCase() === "alto") {
-            const stmtAlerta = db.prepare("INSERT INTO alertas (id_triagem) VALUES (?)");
-            stmtAlerta.run(idTriagemInserida);
-          }
-          return true;
-        });
-
-        transacao();
-        return new Response(JSON.stringify({ sucesso: true }), { status: 201, headers: { "Content-Type": "application/json" } });
-      } catch (e) {
-        return new Response(JSON.stringify({ erro: "Erro ao salvar triagem e gerar alertas" }), { status: 500, headers: { "Content-Type": "application/json" } });
+        sendJson(res, 200, { sucesso: true, usuario: usuarioNormalizado });
+        return;
+      } catch (error) {
+        console.error("Erro em /api/login:", error);
+        sendJson(res, 500, { erro: "Erro no servidor" });
+        return;
       }
     }
 
-    if (m === "GET" && url.pathname === "/api/alertas") {
-      try {
-        const stmt = db.prepare(`
-          SELECT alertas.id_alerta, triagens.id_triagem, triagens.nivel_risco, triagens.data_criacao, triagens.respostas_sintomas, usuarios.nome, usuarios.id_usuario
-          FROM alertas
-          JOIN triagens ON alertas.id_triagem = triagens.id_triagem
-          JOIN usuarios ON triagens.id_usuario = usuarios.id_usuario
-          ORDER BY CASE triagens.nivel_risco WHEN 'alto' THEN 1 WHEN 'médio' THEN 2 END, triagens.data_criacao DESC
-        `);
-        const lista = stmt.all();
-        const processado = lista.map(item => ({
-          id_alerta: item.id_alerta,
-          id_paciente: item.id_usuario,
-          nome: item.nome,
-          risco: item.nivel_risco,
-          data: item.data_criacao,
-          respostas: JSON.parse(item.respostas_sintomas)
-        }));
-        return new Response(JSON.stringify(processado), { status: 200, headers: { "Content-Type": "application/json" } });
-      } catch (e) {
-        return new Response(JSON.stringify({ erro: "Erro ao buscar alertas" }), { status: 500, headers: { "Content-Type": "application/json" } });
-      }
-    }
+    if (method === "POST" && url.pathname === "/api/triagem") {
+      const dados = await lerCorpo(req);
+      const { id_usuario, respostas_sintomas, nivel_risco } = dados;
 
-    if (m === "POST" && url.pathname === "/api/comorbidades") {
+      if (!id_usuario || !Array.isArray(respostas_sintomas) || !nivel_risco) {
+        sendJson(res, 400, { erro: "Dados incompletos" });
+        return;
+      }
+
+      const nivel = String(nivel_risco).trim().toLowerCase();
+      const nivelValido = ["baixo", "medio", "médio", "alto"].includes(nivel);
+
+      if (!nivelValido) {
+        sendJson(res, 400, { erro: "Nível de risco inválido." });
+        return;
+      }
+
+      const nivelArmazenado = nivel === "médio" ? "médio" : nivel === "medio" ? "medio" : nivel;
+
+      db.exec("BEGIN;");
       try {
-        const dados = await req.json();
-        const { id_paciente, id_profissional, descricao_comorbidade } = dados;
-        if (!id_paciente || !id_profissional || !descricao_comorbidade) {
-          return new Response(JSON.stringify({ erro: "Dados incompletos" }), { status: 400, headers: { "Content-Type": "application/json" } });
+        const insertTriagem = db.prepare("INSERT INTO triagens (id_usuario, respostas_sintomas, nivel_risco) VALUES (?, ?, ?)");
+        const resultado = insertTriagem.run(Number(id_usuario), JSON.stringify(respostas_sintomas), nivelArmazenado);
+        const idTriagem = Number(resultado.lastInsertRowid);
+
+        if (nivel === "medio" || nivel === "médio" || nivel === "alto") {
+          const insertAlerta = db.prepare("INSERT INTO alertas (id_triagem) VALUES (?)");
+          insertAlerta.run(idTriagem);
         }
-        const stmt = db.prepare("INSERT INTO comorbidades (id_paciente, id_profissional, descricao_comorbidade) VALUES (?, ?, ?)");
-        stmt.run(id_paciente, id_profissional, descricao_comorbidade);
-        return new Response(JSON.stringify({ sucesso: true }), { status: 201, headers: { "Content-Type": "application/json" } });
-      } catch (e) {
-        return new Response(JSON.stringify({ erro: "Erro ao registrar comorbidade" }), { status: 500, headers: { "Content-Type": "application/json" } });
+
+        db.exec("COMMIT;");
+      } catch (error) {
+        db.exec("ROLLBACK;");
+        console.error("Erro em /api/triagem:", error);
+        throw error;
       }
+
+      sendJson(res, 201, { sucesso: true });
+      return;
     }
 
-    if (m === "GET" && url.pathname === "/api/comorbidades") {
-      try {
-        const stmt = db.prepare(`
-          SELECT comorbidades.id_comorbidade, comorbidades.descricao_comorbidade, paciente.nome AS nome_paciente, profissional.nome AS nome_profissional
-          FROM comorbidades
-          JOIN usuarios AS paciente ON comorbidades.id_paciente = paciente.id_usuario
-          JOIN usuarios AS profissional ON comorbidades.id_profissional = profissional.id_usuario
-        `);
-        const lista = stmt.all();
-        return new Response(JSON.stringify(lista), { status: 200, headers: { "Content-Type": "application/json" } });
-      } catch (e) {
-        return new Response(JSON.stringify({ erro: "Erro ao buscar comorbidades" }), { status: 500, headers: { "Content-Type": "application/json" } });
-      }
+    if (method === "GET" && url.pathname === "/api/alertas") {
+      const stmt = db.prepare(`
+        SELECT alertas.id_alerta, triagens.id_triagem, triagens.nivel_risco, triagens.data_criacao, triagens.respostas_sintomas, usuarios.nome, usuarios.id_usuario
+        FROM alertas
+        JOIN triagens ON alertas.id_triagem = triagens.id_triagem
+        JOIN usuarios ON triagens.id_usuario = usuarios.id_usuario
+        ORDER BY CASE triagens.nivel_risco
+          WHEN 'alto' THEN 1
+          WHEN 'medio' THEN 2
+          WHEN 'médio' THEN 2
+          WHEN 'baixo' THEN 3
+          ELSE 4
+        END,
+        triagens.data_criacao DESC
+      `);
+
+      const lista = stmt.all();
+      const processado = lista.map((item) => ({
+        id_alerta: item.id_alerta,
+        id_paciente: item.id_usuario,
+        nome: item.nome,
+        risco: item.nivel_risco,
+        data: item.data_criacao,
+        respostas: JSON.parse(item.respostas_sintomas || "[]")
+      }));
+
+      sendJson(res, 200, processado);
+      return;
     }
 
-    return new Response("Rota nao encontrada", { status: 404 });
+    if (method === "POST" && url.pathname === "/api/comorbidades") {
+      const dados = await lerCorpo(req);
+      const { id_paciente, id_profissional, descricao_comorbidade } = dados;
+
+      if (!id_paciente || !id_profissional || !descricao_comorbidade) {
+        sendJson(res, 400, { erro: "Dados incompletos" });
+        return;
+      }
+
+      const stmt = db.prepare("INSERT INTO comorbidades (id_paciente, id_profissional, descricao_comorbidade) VALUES (?, ?, ?)");
+      stmt.run(Number(id_paciente), Number(id_profissional), String(descricao_comorbidade).trim());
+      sendJson(res, 201, { sucesso: true });
+      return;
+    }
+
+    if (method === "GET" && url.pathname === "/api/comorbidades") {
+      const stmt = db.prepare(`
+        SELECT comorbidades.id_comorbidade, comorbidades.descricao_comorbidade, paciente.nome AS nome_paciente, profissional.nome AS nome_profissional
+        FROM comorbidades
+        JOIN usuarios AS paciente ON comorbidades.id_paciente = paciente.id_usuario
+        JOIN usuarios AS profissional ON comorbidades.id_profissional = profissional.id_usuario
+      `);
+
+      const lista = stmt.all();
+      sendJson(res, 200, lista);
+      return;
+    }
+
+    res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("Rota nao encontrada");
+  } catch (error) {
+    console.error("Erro global:", error);
+    sendJson(res, 500, { erro: "Erro no servidor" });
   }
 });
 
-console.log(`Servidor rodando em http://localhost:${server.port}`);
+const PORT = 3000;
+server.listen(PORT, () => {
+  console.log(`Servidor rodando em http://localhost:${PORT}`);
+});

@@ -182,6 +182,7 @@ function carregarPainel() {
     if (tipo === "paciente") {
         acoesPaciente.classList.remove("hidden");
         acoesProfissional.classList.add("hidden");
+        carregarHistorico();
         return;
     }
 
@@ -207,13 +208,17 @@ function renderizarPergunta() {
     const pergunta = perguntas[indicePerguntaAtual];
     if (!pergunta) return;
 
-    document.getElementById("progresso-questionario").innerText = `Pergunta ${indicePerguntaAtual + 1} de ${perguntas.length}`;
+    const numeroAtual = indicePerguntaAtual + 1;
+    document.getElementById("progresso-questionario").innerText = `Pergunta ${numeroAtual} de ${perguntas.length}`;
+    document.getElementById("barra-progresso").style.width = `${(numeroAtual / perguntas.length) * 100}%`;
 
     let html = `<p class="form-group" style="font-size: 1.15rem; font-weight: 600; margin-bottom: 1.5rem;">${pergunta.texto}</p>`;
+    const respostaAnterior = respostasFormulario[indicePerguntaAtual];
     pergunta.opcoes.forEach((opcao, idx) => {
+        const marcado = respostaAnterior === opcao.valor || (respostaAnterior === undefined && idx === 0);
         html += `
             <label class="opcao-container">
-                <input type="radio" name="opcao" value="${opcao.valor}" ${idx === 0 ? "checked" : ""} required>
+                <input type="radio" name="opcao" value="${opcao.valor}" ${marcado ? "checked" : ""} required>
                 <span>${opcao.texto}</span>
             </label>
         `;
@@ -231,7 +236,6 @@ function renderizarPergunta() {
 document.getElementById("btn-pergunta-anterior").addEventListener("click", () => {
     if (indicePerguntaAtual > 0) {
         indicePerguntaAtual--;
-        respostasFormulario.pop();
         renderizarPergunta();
     }
 });
@@ -244,7 +248,7 @@ formPergunta.addEventListener("submit", async (e) => {
         return;
     }
 
-    respostasFormulario.push(Number.parseInt(selecionado.value, 10));
+    respostasFormulario[indicePerguntaAtual] = Number.parseInt(selecionado.value, 10);
 
     if (indicePerguntaAtual < perguntas.length - 1) {
         indicePerguntaAtual++;
@@ -311,13 +315,37 @@ async function carregarAlertas() {
     }
 
     const dados = await res.json();
+    window.alertasAtuais = Array.isArray(dados) ? dados : [];
+    atualizarResumoRiscos(window.alertasAtuais);
+    renderizarAlertas(window.alertasAtuais);
+}
+
+function atualizarResumoRiscos(lista) {
+    const contadores = { alto: 0, medio: 0, baixo: 0 };
+    lista.forEach((item) => {
+        const risco = normalizarClassRisco(item.risco);
+        if (contadores[risco] !== undefined) contadores[risco]++;
+    });
+
+    document.getElementById("resumo-riscos").innerHTML = `
+        <div class="risco-card alto"><strong>${contadores.alto}</strong><span>Alto</span></div>
+        <div class="risco-card medio"><strong>${contadores.medio}</strong><span>Médio</span></div>
+        <div class="risco-card baixo"><strong>${contadores.baixo}</strong><span>Baixo</span></div>
+    `;
+}
+
+function renderizarAlertas(lista) {
     const tbody = document.querySelector("#tabela-alertas tbody");
     if (!tbody) {
         return;
     }
 
     tbody.innerHTML = "";
-    const lista = Array.isArray(dados) ? dados : [];
+
+    if (lista.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" class="estado-vazio">Nenhum alerta encontrado.</td></tr>`;
+        return;
+    }
 
     lista.forEach((item) => {
         const tr = document.createElement("tr");
@@ -326,11 +354,71 @@ async function carregarAlertas() {
         const risco = normalizarClassRisco(item.risco);
 
         tr.innerHTML = `
-            <td><strong>${item.nome}</strong></td>
+            <td><strong>${escaparHtml(item.nome)}</strong></td>
             <td>${dataFormatada}</td>
-            <td><span class="badge ${risco}">${item.risco}</span></td>
+            <td><span class="badge ${risco}">${risco === "medio" ? "Médio" : risco.charAt(0).toUpperCase() + risco.slice(1)}</span></td>
             <td>Valores de Resposta: [ ${respostas.join(", ")} ]</td>
         `;
         tbody.appendChild(tr);
+    });
+}
+
+function escaparHtml(valor) {
+    const elemento = document.createElement("span");
+    elemento.textContent = String(valor ?? "");
+    return elemento.innerHTML;
+}
+
+function filtrarAlertas() {
+    const termo = document.getElementById("busca-alertas").value.trim().toLowerCase();
+    const risco = document.getElementById("filtro-risco").value;
+    const filtrados = (window.alertasAtuais || []).filter((item) => {
+        const correspondeNome = String(item.nome).toLowerCase().includes(termo);
+        const correspondeRisco = !risco || normalizarClassRisco(item.risco) === risco;
+        return correspondeNome && correspondeRisco;
+    });
+    renderizarAlertas(filtrados);
+}
+
+document.getElementById("busca-alertas").addEventListener("input", filtrarAlertas);
+document.getElementById("filtro-risco").addEventListener("change", filtrarAlertas);
+
+async function carregarHistorico() {
+    const idUsuario = usuarioLogado?.id_usuario ?? usuarioLogado?.id;
+    const lista = document.getElementById("lista-historico");
+    const contador = document.getElementById("historico-contador");
+    if (!idUsuario || !lista) return;
+
+    lista.innerHTML = `<p class="estado-vazio">Carregando avaliações...</p>`;
+    const res = await fetch(`/api/triagens?id_usuario=${encodeURIComponent(idUsuario)}`);
+    if (!res.ok) {
+        lista.innerHTML = `<p class="estado-vazio">Não foi possível carregar o histórico.</p>`;
+        return;
+    }
+
+    const dados = await res.json();
+    const historico = Array.isArray(dados) ? dados : [];
+    contador.textContent = `${historico.length} ${historico.length === 1 ? "avaliação" : "avaliações"}`;
+
+    if (historico.length === 0) {
+        lista.innerHTML = `<p class="estado-vazio">Nenhuma triagem realizada.</p>`;
+        return;
+    }
+
+    lista.innerHTML = "";
+    historico.forEach((item) => {
+        const risco = normalizarClassRisco(item.nivel_risco);
+        const data = new Date(item.data).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
+        const card = document.createElement("article");
+        card.className = "historico-card";
+        card.innerHTML = `
+            <div class="historico-data">${escaparHtml(data)}</div>
+            <div>
+                <strong>${risco === "medio" ? "Risco médio" : `Risco ${risco}`}</strong>
+                <span>Pontuação registrada: ${Array.isArray(item.respostas) ? item.respostas.join(", ") : "-"}</span>
+            </div>
+            <span class="badge ${risco}">${risco === "medio" ? "Médio" : risco.charAt(0).toUpperCase() + risco.slice(1)}</span>
+        `;
+        lista.appendChild(card);
     });
 }

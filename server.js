@@ -292,6 +292,31 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (method === "GET" && url.pathname === "/api/triagens") {
+      const idUsuario = Number(url.searchParams.get("id_usuario"));
+      if (!Number.isInteger(idUsuario) || idUsuario <= 0) {
+        sendJson(res, 400, { erro: "Paciente inválido." });
+        return;
+      }
+
+      const stmt = db.prepare(`
+        SELECT id_triagem, respostas_sintomas, nivel_risco, data_criacao
+        FROM triagens
+        WHERE id_usuario = ?
+        ORDER BY data_criacao DESC
+      `);
+
+      const lista = stmt.all(idUsuario).map((item) => ({
+        id_triagem: item.id_triagem,
+        respostas: JSON.parse(item.respostas_sintomas || "[]"),
+        nivel_risco: item.nivel_risco,
+        data: item.data_criacao
+      }));
+
+      sendJson(res, 200, lista);
+      return;
+    }
+
     res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
     res.end("Rota nao encontrada");
   } catch (error) {

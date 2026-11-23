@@ -10,31 +10,39 @@
 <body>
     <header class="app-header">
         <div class="header-container">
-            <h1>BemEstar 360</h1>
+            <a class="brand" href="#" aria-label="BemEstar 360">
+                <span class="brand-mark" aria-hidden="true">B</span>
+                <span>BemEstar <strong>360</strong></span>
+            </a>
             <div id="usuario-info" class="hidden">
-                <span id="usuario-logado"></span>
-                <button id="btn-logout" class="btn-secondary">Sair</button>
+                <span id="usuario-logado" class="usuario-logado"></span>
+                <button id="btn-logout" class="btn-header">Sair</button>
             </div>
         </div>
     </header>
 
     <main class="container">
         <section id="tela-autenticacao" class="card">
-            <div class="tabs">
-                <button id="tab-login" class="tab-btn active">Login</button>
-                <button id="tab-cadastro" class="tab-btn">Cadastro</button>
+            <div class="auth-heading">
+                <span class="eyebrow">Cuidado que acompanha você</span>
+                <h2>Bem-vindo ao BemEstar 360</h2>
+                <p>Faça o acompanhamento da sua saúde de forma simples e segura.</p>
+            </div>
+
+            <div class="tabs" role="tablist" aria-label="Acesso">
+                <button id="tab-login" class="tab-btn active" role="tab" aria-selected="true">Entrar</button>
+                <button id="tab-cadastro" class="tab-btn" role="tab" aria-selected="false">Criar conta</button>
             </div>
 
             <div id="form-login-container">
                 <form id="form-login">
-                    <h2>Acessar o Sistema</h2>
                     <div class="form-group">
                         <label for="login-email">E-mail</label>
-                        <input type="email" id="login-email" required>
+                        <input type="email" id="login-email" placeholder="seuemail@exemplo.com" autocomplete="email" required>
                     </div>
                     <div class="form-group">
                         <label for="login-senha">Senha</label>
-                        <input type="password" id="login-senha" required>
+                        <input type="password" id="login-senha" placeholder="Digite sua senha" autocomplete="current-password" required>
                     </div>
                     <button type="submit" class="btn-primary">Entrar</button>
                 </form>
@@ -42,22 +50,21 @@
 
             <div id="form-cadastro-container" class="hidden">
                 <form id="form-cadastro">
-                    <h2>Criar Conta</h2>
                     <div class="form-group">
                         <label for="cad-nome">Nome Completo</label>
-                        <input type="text" id="cad-nome" required>
+                        <input type="text" id="cad-nome" autocomplete="name" required>
                     </div>
                     <div class="form-group">
                         <label for="cad-email">E-mail</label>
-                        <input type="email" id="cad-email" required>
+                        <input type="email" id="cad-email" autocomplete="email" required>
                     </div>
                     <div class="form-group">
                         <label for="cad-endereco">Endereço</label>
-                        <input type="text" id="cad-endereco" required>
+                        <input type="text" id="cad-endereco" autocomplete="street-address" required>
                     </div>
                     <div class="form-group">
                         <label for="cad-senha">Senha</label>
-                        <input type="password" id="cad-senha" required>
+                        <input type="password" id="cad-senha" minlength="6" autocomplete="new-password" required>
                     </div>
                     <div class="form-group">
                         <label for="cad-tipo">Tipo de Perfil</label>
@@ -73,14 +80,30 @@
         </section>
 
         <section id="tela-principal" class="card hidden">
-            <h2>Painel de Controle</h2>
-            <p class="boas-vindas">Boas-vindas ao sistema de triagem domiciliar alinhado aos objetivos da ODS 3 da Organização das Nações Unidas.</p>
+            <div class="painel-heading">
+                <div>
+                    <span class="eyebrow">Painel de controle</span>
+                    <h2>Como podemos cuidar de você hoje?</h2>
+                </div>
+            </div>
             
             <div id="acoes-paciente" class="hidden">
                 <div class="info-box">
-                    <h3>Sua Saude em Primeiro Lugar</h3>
-                    <p>Responda ao nosso questionario rapido para avaliarmos suas condicoes gerais de saude e determinarmos o nivel de risco e os cuidados necessarios.</p>
-                    <button id="btn-iniciar-questionario" class="btn-primary">Iniciar Questionario de Triagem</button>
+                    <div class="info-box-icon" aria-hidden="true">+</div>
+                    <div>
+                        <h3>Sua saúde em primeiro lugar</h3>
+                        <p>Responda ao questionário rápido e receba uma orientação inicial sobre o nível de cuidado recomendado.</p>
+                        <button id="btn-iniciar-questionario" class="btn-primary">Iniciar triagem</button>
+                    </div>
+                </div>
+                <div class="historico-section">
+                    <div class="section-heading">
+                        <h3>Suas avaliações</h3>
+                        <span id="historico-contador" class="section-counter">0 avaliações</span>
+                    </div>
+                    <div id="lista-historico" class="historico-lista">
+                        <p class="estado-vazio">Nenhuma triagem realizada.</p>
+                    </div>
                 </div>
             </div>
 
@@ -88,7 +111,17 @@
                 <div class="info-box">
                     <h3>Alertas de Monitoramento</h3>
                     <p>Monitore abaixo as triagens concluidas e a classificacao de risco epidemiologico e clinico dos pacientes cadastrados.</p>
-                    <button id="btn-atualizar-alertas" class="btn-secondary">Atualizar Painel</button>
+                    <div id="resumo-riscos" class="resumo-riscos"></div>
+                    <div class="toolbar-alertas">
+                        <input type="search" id="busca-alertas" placeholder="Buscar paciente">
+                        <select id="filtro-risco" aria-label="Filtrar por risco">
+                            <option value="">Todos os riscos</option>
+                            <option value="alto">Risco alto</option>
+                            <option value="medio">Risco médio</option>
+                            <option value="baixo">Risco baixo</option>
+                        </select>
+                        <button id="btn-atualizar-alertas" class="btn-secondary">Atualizar</button>
+                    </div>
                     <div class="table-container">
                         <table id="tabela-alertas">
                             <thead>
@@ -108,9 +141,13 @@
 
         <section id="tela-questionario" class="card hidden">
             <div class="questionario-header">
-                <h2>Questionario de Triagem ODS 3</h2>
-                <div id="progresso-questionario">Pergunta 1 de 4</div>
+                <div>
+                    <span class="eyebrow">Avaliação rápida</span>
+                    <h2>Triagem de saúde</h2>
+                </div>
+                <div id="progresso-questionario" class="progresso-label">Pergunta 1 de 4</div>
             </div>
+            <div class="barra-progresso" aria-hidden="true"><span id="barra-progresso"></span></div>
             <form id="form-pergunta">
                 <div id="bloco-pergunta"></div>
                 <div class="botoes-fluxo">

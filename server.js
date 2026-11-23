@@ -151,7 +151,11 @@ const server = http.createServer(async (req, res) => {
         }
 
         console.error("Erro em /api/cadastro:", error);
-        sendJson(res, 400, { erro: "Email já cadastrado ou erro de validação" });
+        if (mensagemErro.includes("readonly")) {
+          sendJson(res, 500, { erro: "Não foi possível acessar o banco de dados. Reinicie o servidor." });
+          return;
+        }
+        sendJson(res, 400, { erro: "Não foi possível realizar o cadastro." });
         return;
       }
     }

@@ -309,8 +309,16 @@ function normalizarClassRisco(risco) {
 }
 
 async function carregarAlertas() {
+    const tbody = document.querySelector("#tabela-alertas tbody");
+    if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="4" class="estado-vazio">Carregando pacientes...</td></tr>`;
+    }
+
     const res = await fetch("/api/alertas");
     if (!res.ok) {
+        if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="4" class="estado-vazio">Não foi possível carregar os pacientes.</td></tr>`;
+        }
         return;
     }
 
@@ -357,10 +365,25 @@ function renderizarAlertas(lista) {
             <td><strong>${escaparHtml(item.nome)}</strong></td>
             <td>${dataFormatada}</td>
             <td><span class="badge ${risco}">${risco === "medio" ? "Médio" : risco.charAt(0).toUpperCase() + risco.slice(1)}</span></td>
-            <td>Valores de Resposta: [ ${respostas.join(", ")} ]</td>
+            <td>${formatarRespostas(respostas)}</td>
         `;
         tbody.appendChild(tr);
     });
+}
+
+function formatarRespostas(respostas) {
+    if (!Array.isArray(respostas) || respostas.length === 0) {
+        return "Nenhuma resposta registrada";
+    }
+
+    const respostasPorPergunta = [
+        respostas[0] >= 5 ? "Dificuldade respiratória grave ou febre alta" : respostas[0] >= 2 ? "Febre baixa ou persistente" : "Sem complicações respiratórias ou febre",
+        respostas[1] >= 3 ? "Uma ou nenhuma refeição equilibrada" : respostas[1] >= 1 ? "Duas refeições" : "Três ou mais refeições",
+        respostas[2] >= 4 ? "Sem acesso a saneamento ou água limpa" : respostas[2] >= 2 ? "Acesso parcial ou intermitente" : "Acesso completo",
+        respostas[3] >= 3 ? "Raramente ou nunca realizou consulta" : respostas[3] >= 2 ? "Consulta apenas com sintomas graves" : "Realiza consultas regularmente"
+    ];
+
+    return respostasPorPergunta.map((resposta) => `• ${escaparHtml(resposta)}`).join("<br>");
 }
 
 function escaparHtml(valor) {

@@ -240,9 +240,9 @@ const server = http.createServer(async (req, res) => {
 
     if (method === "GET" && url.pathname === "/api/alertas") {
       const stmt = db.prepare(`
-        SELECT alertas.id_alerta, triagens.id_triagem, triagens.nivel_risco, triagens.data_criacao, triagens.respostas_sintomas, usuarios.nome, usuarios.id_usuario
-        FROM alertas
-        JOIN triagens ON alertas.id_triagem = triagens.id_triagem
+        SELECT triagens.id_triagem, triagens.nivel_risco, triagens.data_criacao,
+               triagens.respostas_sintomas, usuarios.nome, usuarios.id_usuario
+        FROM triagens
         JOIN usuarios ON triagens.id_usuario = usuarios.id_usuario
         ORDER BY CASE triagens.nivel_risco
           WHEN 'alto' THEN 1
@@ -256,7 +256,7 @@ const server = http.createServer(async (req, res) => {
 
       const lista = stmt.all();
       const processado = lista.map((item) => ({
-        id_alerta: item.id_alerta,
+        id_alerta: item.id_triagem,
         id_paciente: item.id_usuario,
         nome: item.nome,
         risco: item.nivel_risco,

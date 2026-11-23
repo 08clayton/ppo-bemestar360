@@ -413,6 +413,22 @@ input:focus, select:focus {
     overflow-x: auto;
 }
 
+.pacientes-section {
+    margin-top: 18px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: white;
+    padding: 20px;
+}
+
+.pacientes-section .section-heading {
+    margin-bottom: 14px;
+}
+
+.pacientes-section table {
+    min-width: 760px;
+}
+
 table {
     width: 100%;
     border-collapse: collapse;
